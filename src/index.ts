@@ -1,6 +1,8 @@
 import { buildApp } from './server.ts'
 
-const server = buildApp()
+const server = buildApp({
+    logger: true
+})
 
 const start = async (): Promise<void> => {
     try {
