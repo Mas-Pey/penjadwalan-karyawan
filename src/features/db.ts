@@ -1,6 +1,7 @@
 import Database from "better-sqlite3"
+import type { Database as BetterSqliteDatabase } from "better-sqlite3"
 
-const db = new Database('employee.db', { verbose: console.log }) as any
+const db: BetterSqliteDatabase = new Database('employee.db', { verbose: console.log })
 
 db.prepare(`
     CREATE TABLE IF NOT EXISTS employees (
