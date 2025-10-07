@@ -32,7 +32,6 @@ const employeeRoutes: FastifyPluginAsync = async (fastify) => {
                 })
             }
             return {
-                success: true, 
                 employee: stmt
             }
         }
@@ -42,13 +41,11 @@ const employeeRoutes: FastifyPluginAsync = async (fastify) => {
         async (request, reply) => {
             if (typeof request.body.name !== "string") {
                 return reply.status(404).send({
-                    success: true,
                     message: "Name must be a text"
                 })
             }
             const stmt = db.prepare("INSERT INTO employees (name) VALUES (?)").run(request.body.name)
             return {
-                success: true,
                 message: `Employee '${request.body.name}' successfully added`,
                 employee: {
                     id: stmt.lastInsertRowid,
@@ -68,7 +65,6 @@ const employeeRoutes: FastifyPluginAsync = async (fastify) => {
             }
             db.prepare("UPDATE employees SET name = ? WHERE id = ?").run(request.body.name, request.params.id)
             return {
-                success: true,
                 employee: { 
                     id: request.params.id, 
                     name: request.body.name 
@@ -87,7 +83,6 @@ const employeeRoutes: FastifyPluginAsync = async (fastify) => {
                 })
             } 
             return {
-                success: true,
                 message: `Employee ID : '${request.params.id}' successfully deleted`
             }
         }
