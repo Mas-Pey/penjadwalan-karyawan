@@ -19,9 +19,6 @@ interface EmployeeBody {
  * ROUTES
  */
 const employeeRoutes: FastifyPluginAsync = async (fastify) => {
-    fastify.get('/', async (request, reply) => {
-        return { message: 'Halo Karyawan :*' }
-    })
 
     fastify.get<{ Params: EmployeeParams }>('/employee/:id',
         async (request, reply) => {
@@ -69,7 +66,7 @@ const employeeRoutes: FastifyPluginAsync = async (fastify) => {
                     id: request.params.id, 
                     name: request.body.name 
                 },
-                message: `Employee ID : '${request.params.id}' successfully updated`
+                message: `Employee ID : ${request.params.id} successfully updated`
             }
         }
     )
@@ -83,7 +80,7 @@ const employeeRoutes: FastifyPluginAsync = async (fastify) => {
                 })
             } 
             return {
-                message: `Employee ID : '${request.params.id}' successfully deleted`
+                message: `Employee ID : ${request.params.id} successfully deleted`
             }
         }
     )
