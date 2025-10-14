@@ -13,6 +13,18 @@ interface ScheduleBody {
     holidays?: string[]
 }
 
+interface Shift {
+    time: string,
+    start_time: string,
+    end_time: string,
+    hours: number
+}
+
+interface DPState {
+    dayIndex: number,
+    hoursWorked: number[]
+}
+
 /**
  * 
  * ROUTES
@@ -22,9 +34,10 @@ const scheduleRoutes: FastifyPluginAsync = async (fastify) => {
         async (request, reply) => {
             const { month, holidays = [] } = request.body
 
+            // --- VALIDATE MONTH ---
             if (typeof month !== "number" || month < 1 || month > 12) {
                 return reply.status(404).send({
-                    message: "The 'month' must be a number between 1 and 12."
+                    message: "The month must be a number between 1 and 12."
                 })
             }
 
@@ -41,7 +54,7 @@ const scheduleRoutes: FastifyPluginAsync = async (fastify) => {
                 }
             }
 
-            // === CHECK EMPLOYEES ===
+            // === FETCH EMPLOYEES ===
             const employees = db.prepare("SELECT name FROM employees").all() as { name: string }[]
             if (employees.length < 2){
                 return reply.status(400).send({
@@ -65,7 +78,15 @@ const scheduleRoutes: FastifyPluginAsync = async (fastify) => {
                 }
             ]
 
+            // --- INITIALIZE DATA STRUCTURES ---
+            const schedule: any[] = []
+            const weeklyHours: Record<string, number[]> = {}
+            for (const emp of employees) {
+                weeklyHours[emp.name] = [0, 0, 0, 0, 0] // assumption of 5 weeks/month
+            }
 
+            // --- DP FOR SCHEDULING ---
+            
         }
     )
 }
