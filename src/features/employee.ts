@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify"
-import fp from 'fastify-plugin'
+import fp, { fastifyPlugin } from 'fastify-plugin'
 import db from './db.ts'
 
 /**
@@ -19,6 +19,15 @@ interface EmployeeBody {
  * ROUTES
  */
 const employeeRoutes: FastifyPluginAsync = async (fastify) => {
+
+    fastify.get('/employees',
+        async (request, reply) => {
+            const stmt = db.prepare("SELECT * FROM employees").all()
+            return {
+                employees: stmt
+            }
+        }
+    )
 
     fastify.get<{ Params: EmployeeParams }>('/employee/:id',
         async (request, reply) => {
