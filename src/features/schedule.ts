@@ -5,6 +5,7 @@ import fp from 'fastify-plugin'
  * TYPES 
  * 
  * 
+ * 
  */
 interface DaySchedule {
     date: string,
@@ -27,6 +28,7 @@ interface OverworkedEmployee {
 /**
  * 
  * HELPER FUNCTIONS
+ * 
  * 
  */
 export function getEmployeeOnDate(
@@ -121,6 +123,28 @@ export function getMedianofWeeklyHours(
 /**
  * 
  * 
+ * SCHEMA VALIDATION
+ * 
+ */
+const createScheduleSchema = {
+    body: {
+        type: 'object',
+        required: ['month', 'total_employee', 'shift_per_day', 'hour_shift'],
+        properties: {
+            month: { type: 'number', minimum: 0, maximum: 11 },
+            total_employee: { type: 'number', minimum: 1 },
+            shift_per_day: { type: 'number', minimum: 1 },
+            hour_shift: { type: 'number', minimum: 1 },
+            maximum_hour_per_week: { type: 'number', minimum: 1 }
+        },
+        additionalProperties: false
+    }
+}
+
+/**
+ * 
+ * 
+ * 
  * ROUTES
  */
 const scheduleRoutes: FastifyPluginAsync = async (fastify) => {
@@ -132,39 +156,9 @@ const scheduleRoutes: FastifyPluginAsync = async (fastify) => {
             hour_shift: number,
             maximum_hour_per_week?: number
         }
-    }>('/create-schedule',
+    }>('/create-schedule', { schema: createScheduleSchema },
         async (request, reply) => {
             const { month, total_employee, shift_per_day, hour_shift, maximum_hour_per_week = 40 } = request.body
-
-            if (total_employee === undefined) {
-                return reply.status(400).send({
-                    message: "total_employee is required"
-                })
-            }
-
-            if (typeof month !== 'number' || month < 0 || month > 11) {
-                return reply.status(400).send({
-                    message: "Invalid month, should be between 0-11"
-                })
-            }
-
-            if (typeof total_employee !== 'number' || total_employee < 1) {
-                return reply.status(400).send({
-                    message: "Invalid total_employee, minimum 1 employee"
-                })
-            }
-
-            if (hour_shift === undefined || typeof hour_shift !== 'number' || hour_shift <= 0) {
-                return reply.status(400).send({
-                    message: "hour_shift is required and must be a positive number"
-                })
-            }
-
-            if (shift_per_day <= 0 || typeof shift_per_day !== 'number') {
-                return reply.status(400).send({
-                    message: "shift must be a positive number"
-                })
-            }
 
             const year = new Date().getFullYear()
             const totalDays = new Date(year, month + 1, 0).getDate()
