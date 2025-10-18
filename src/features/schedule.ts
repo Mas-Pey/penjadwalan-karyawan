@@ -14,15 +14,28 @@ interface DaySchedule {
     time_end: string
 }
 
-interface ScheduleResponse {
-    summary: {},
-    schedules: DaySchedule[]
-}
-
 interface OverworkedEmployee {
     name: string,
     totalHours: number,
     week: string
+}
+
+interface ScheduleSummary {
+    median_of_weekly_hour: number,
+    weekly_hour_breakdown: Record<string, Record<string, number>>
+    monthly_hour_breakdown: Record<string, number>
+    overworked_employees: OverworkedEmployee[]
+}
+
+interface ScheduleResponse {
+    summary: ScheduleSummary,
+    schedules: DaySchedule[]
+}
+
+interface ShiftTime {
+    shift: number,
+    time_start: string,
+    time_end: string
 }
 
 /**
@@ -49,24 +62,24 @@ export function getEmployeeOnShift(
     date: string,
     employeeName: string,
     shift: number,
-    shift_per_day: number,
-    schedules: DaySchedule[]
+    employee_per_shift: number,
+    schedules: DaySchedule[],
+    shiftTimes: ShiftTime[]
 ): DaySchedule | null {
+    const shiftTime = shiftTimes[shift - 1]
+    if (!shiftTime) return null
+
     const schedule = schedules.find(s => {
         const isSameDate = date === s.date
-        const isSameShift = shift === 1
-            ? s.time_start === '07:00' && s.time_end === '15:00'
-            : s.time_start === '15:00' && s.time_end === '23:00'
+        const isSameShift = s.time_start === shiftTime.time_start && s.time_end === shiftTime.time_end
         const isEmployeeExist = s.employees.includes(employeeName)
-        if (isSameDate && isSameShift && !isEmployeeExist && s.employees.length <= shift_per_day) {
+        if (isSameDate && isSameShift && !isEmployeeExist && s.employees.length <= employee_per_shift) {
             return true
         }
         return false
     })
-    if (schedule) {
-        return schedule
-    }
-    return null
+
+    return schedule ?? null
 }
 
 export function addHours(
@@ -84,7 +97,7 @@ export function addHours(
 
 export function getOverworkedEmployees(
     weeklyHours: Record<string, Record<string, number>>,
-    threshold: number  
+    threshold: number
 ): OverworkedEmployee[] {
     const overworked: { name: string; totalHours: number; week: string }[] = []
     for (const [week, hoursPerEmployee] of Object.entries(weeklyHours)) {
@@ -120,6 +133,27 @@ export function getMedianofWeeklyHours(
     }
 }
 
+export function generateShiftTimes(
+    openHour: number,
+    shiftPerDay: number,
+    hourShift?: number
+): ShiftTime[] {
+    const shiftTimes = []
+    const hoursPerShift = hourShift ?? Math.floor(24 / shiftPerDay)
+
+    for (let i = 0; i < shiftPerDay; i++) {
+        const start = (openHour + i * hoursPerShift) % 24
+        const end = (start + hoursPerShift) % 24
+        shiftTimes.push({
+            shift: i + 1,
+            time_start: `${String(start).padStart(2, '0')}:00`,
+            time_end: `${String(end).padStart(2, '0')}:00`
+        })
+    }
+
+    return shiftTimes
+}
+
 /**
  * 
  * 
@@ -129,12 +163,14 @@ export function getMedianofWeeklyHours(
 const createScheduleSchema = {
     body: {
         type: 'object',
-        required: ['month', 'total_employee', 'shift_per_day', 'hour_shift'],
+        required: ['month', 'total_employee', 'shift_per_day', 'open_hour', 'employee_per_shift'],
         properties: {
             month: { type: 'number', minimum: 0, maximum: 11 },
             total_employee: { type: 'number', minimum: 1 },
             shift_per_day: { type: 'number', minimum: 1 },
+            open_hour: { type: 'number', minimum: 0, maximum: 23 },
             hour_shift: { type: 'number', minimum: 1 },
+            employee_per_shift: { type: 'number', minimum: 1 },
             maximum_hour_per_week: { type: 'number', minimum: 1 }
         },
         additionalProperties: false
@@ -152,13 +188,39 @@ const scheduleRoutes: FastifyPluginAsync = async (fastify) => {
         Body: {
             month: number,
             total_employee: number,
-            shift_per_day:number,
+            shift_per_day: number,
+            open_hour: number,
             hour_shift: number,
+            employee_per_shift: number,
             maximum_hour_per_week?: number
         }
     }>('/create-schedule', { schema: createScheduleSchema },
         async (request, reply) => {
-            const { month, total_employee, shift_per_day, hour_shift, maximum_hour_per_week = 40 } = request.body
+            const {
+                month,
+                total_employee,
+                shift_per_day,
+                open_hour,
+                hour_shift,
+                employee_per_shift,
+                maximum_hour_per_week = 40
+            } = request.body
+
+            if (employee_per_shift > total_employee) {
+                return reply.status(400).send({
+                    error: "Invalid configuration",
+                    message: "Number of employees per shift cannot exceed total employees"
+                })
+            }
+
+            if (shift_per_day * hour_shift > 24) {
+                return reply.status(400).send({
+                    error: "Invalid configuration",
+                    message: "Total shift hours in a day exceed 24 hours"
+                })
+            }
+
+            const shiftTimes = generateShiftTimes(open_hour, shift_per_day, hour_shift)
 
             const year = new Date().getFullYear()
             const totalDays = new Date(year, month + 1, 0).getDate()
@@ -169,7 +231,12 @@ const scheduleRoutes: FastifyPluginAsync = async (fastify) => {
             const weeklyHours: Record<string, Record<string, number>> = {}
 
             const response: ScheduleResponse = {
-                summary: {},
+                summary: {
+                    median_of_weekly_hour: 0,
+                    weekly_hour_breakdown: {},
+                    monthly_hour_breakdown: {},
+                    overworked_employees: []
+                },
                 schedules: []
             }
 
@@ -184,77 +251,42 @@ const scheduleRoutes: FastifyPluginAsync = async (fastify) => {
                         (a, b) => (totalHoursWorkedPerEmployee[a] || 0) - (totalHoursWorkedPerEmployee[b] || 0)
                     )
 
-                    if (shift === 1) {
-                        for (const employee of sortedEmployees) {
-                            const shiftSchedule = getEmployeeOnShift(
+                    const shiftTime = shiftTimes[shift - 1]
+                    if (!shiftTime) continue
+
+                    const { time_start, time_end } = shiftTime
+
+                    for (const employee of sortedEmployees) {
+                        const shiftSchedule = getEmployeeOnShift(
+                            date,
+                            employee,
+                            shift,
+                            employee_per_shift,
+                            employeeHours,
+                            shiftTimes
+                        )
+
+                        const isAlreadyScheduledToday = getEmployeeOnDate(
+                            date,
+                            employee,
+                            employeeHours
+                        )
+
+                        if (isAlreadyScheduledToday) continue
+
+                        if (!shiftSchedule) {
+                            employeeHours.push({
                                 date,
-                                employee,
-                                shift,
-                                shift_per_day,
-                                employeeHours
-                            )
-
-                            const isAlreadyScheduledToday = getEmployeeOnDate(
-                                date,
-                                employee,
-                                employeeHours
-                            )
-
-                            if (isAlreadyScheduledToday) continue
-
-                            if (!shiftSchedule) {
-                                employeeHours.push({
-                                    date,
-                                    employees: [employee],
-                                    time_start: '07:00',
-                                    time_end: '15:00'
-                                })
-                                addHours(employee, week, totalHoursWorkedPerEmployee, weeklyHours, hour_shift)
-                            }
-
-                            if (shiftSchedule) {
-                                if (shiftSchedule?.employees.length < shift_per_day) {
-                                    shiftSchedule.employees.push(employee)
-                                    addHours(employee, week, totalHoursWorkedPerEmployee, weeklyHours, hour_shift)
-                                }
-                            }
-
+                                employees: [employee],
+                                time_start,
+                                time_end
+                            })
+                            addHours(employee, week, totalHoursWorkedPerEmployee, weeklyHours, hour_shift)
                         }
-                    }
 
-                    if (shift === 2) {
-                        for (const employee of sortedEmployees) {
-                            const shiftSchedule = getEmployeeOnShift(
-                                date,
-                                employee,
-                                shift,
-                                shift_per_day,
-                                employeeHours
-                            )
-                            const isAlreadyScheduledToday = getEmployeeOnDate(
-                                date,
-                                employee,
-                                employeeHours
-                            )
-
-                            if (isAlreadyScheduledToday) continue
-
-                            if (!shiftSchedule) {
-                                employeeHours.push({
-                                    date,
-                                    employees: [employee],
-                                    time_start: '15:00',
-                                    time_end: '23:00'
-                                })
-                                addHours(employee, week, totalHoursWorkedPerEmployee, weeklyHours, hour_shift)
-                            }
-
-                            if (shiftSchedule) {
-                                if (shiftSchedule?.employees.length < shift_per_day) {
-                                    shiftSchedule.employees.push(employee)
-                                    addHours(employee, week, totalHoursWorkedPerEmployee, weeklyHours, hour_shift)
-                                }
-                            }
+                        if (shiftSchedule && shiftSchedule.employees.length < employee_per_shift) {
+                            shiftSchedule.employees.push(employee)
+                            addHours(employee, week, totalHoursWorkedPerEmployee, weeklyHours, hour_shift)
                         }
                     }
 
