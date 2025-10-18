@@ -220,6 +220,13 @@ const scheduleRoutes: FastifyPluginAsync = async (fastify) => {
                 })
             }
 
+            if (total_employee < shift_per_day * employee_per_shift) {
+                return reply.status(400).send({
+                    error: "Invalid configuration",
+                    message: "Not enough employees to cover all shifts"
+                })
+            }
+
             const shiftTimes = generateShiftTimes(open_hour, shift_per_day, hour_shift)
 
             const year = new Date().getFullYear()
