@@ -66,7 +66,7 @@ export function getEmployeeOnShift(
     schedules: DaySchedule[],
     shiftTimes: ShiftTime[]
 ): DaySchedule | null {
-    const shiftTime = shiftTimes[shift - 1]
+    const shiftTime = shiftTimes[shift]
     if (!shiftTime) return null
 
     const schedule = schedules.find(s => {
@@ -245,13 +245,13 @@ const scheduleRoutes: FastifyPluginAsync = async (fastify) => {
                 const weekNumber = Math.ceil(day / 7)
                 const week = `week_${weekNumber}`
 
-                for (let shift = 1; shift <= shift_per_day; shift++) {
+                for (let shift = 0; shift < shift_per_day; shift++) {
 
                     const sortedEmployees = [...EMPLOYEES].sort(
                         (a, b) => (totalHoursWorkedPerEmployee[a] || 0) - (totalHoursWorkedPerEmployee[b] || 0)
                     )
 
-                    const shiftTime = shiftTimes[shift - 1]
+                    const shiftTime = shiftTimes[shift]
                     if (!shiftTime) continue
 
                     const { time_start, time_end } = shiftTime
