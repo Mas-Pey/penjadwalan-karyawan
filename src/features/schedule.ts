@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify"
 import fp from 'fastify-plugin'
+import db from './db.ts'
 
 /**
  * TYPES 
@@ -7,6 +8,10 @@ import fp from 'fastify-plugin'
  * 
  * 
  */
+interface Employee {
+    name: string
+}
+
 interface DaySchedule {
     date: string,
     employees: string[],
@@ -163,10 +168,9 @@ export function generateShiftTimes(
 const createScheduleSchema = {
     body: {
         type: 'object',
-        required: ['month', 'total_employee', 'shift_per_day', 'open_hour', 'employee_per_shift'],
+        required: ['month', 'shift_per_day', 'open_hour', 'employee_per_shift'],
         properties: {
             month: { type: 'number', minimum: 0, maximum: 11 },
-            total_employee: { type: 'number', minimum: 1 },
             shift_per_day: { type: 'number', minimum: 1 },
             open_hour: { type: 'number', minimum: 0, maximum: 23 },
             hour_shift: { type: 'number', minimum: 1 },
@@ -187,7 +191,6 @@ const scheduleRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.post<{
         Body: {
             month: number,
-            total_employee: number,
             shift_per_day: number,
             open_hour: number,
             hour_shift: number,
@@ -198,13 +201,23 @@ const scheduleRoutes: FastifyPluginAsync = async (fastify) => {
         async (request, reply) => {
             const {
                 month,
-                total_employee,
                 shift_per_day,
                 open_hour,
                 hour_shift,
                 employee_per_shift,
                 maximum_hour_per_week = 40
             } = request.body
+
+            const stmt = db.prepare("SELECT name FROM employees").all() as Employee[]
+            const total_employee = stmt.length
+            const EMPLOYEES = stmt.map((e: Employee) => e.name)
+
+            if (total_employee === 0) {
+                return reply.status(400).send({
+                    error: "No employees",
+                    message: "There are no employees available to create a schedule"
+                })
+            }
 
             if (employee_per_shift > total_employee) {
                 return reply.status(400).send({
@@ -231,7 +244,6 @@ const scheduleRoutes: FastifyPluginAsync = async (fastify) => {
 
             const year = new Date().getFullYear()
             const totalDays = new Date(year, month + 1, 0).getDate()
-            const EMPLOYEES = Array.from({ length: total_employee }, (_, i) => `Employee ${i + 1}`)
             const employeeHours: DaySchedule[] = []
             const totalHoursWorkedPerEmployee: Record<string, number> = {}
             EMPLOYEES.forEach(e => totalHoursWorkedPerEmployee[e] = 0)
