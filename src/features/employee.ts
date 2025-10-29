@@ -46,7 +46,7 @@ const employeeRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.post<{ Body: EmployeeBody }>('/employee',
         async (request, reply) => {
             if (typeof request.body.name !== "string") {
-                return reply.status(404).send({
+                return reply.status(400).send({
                     message: "Name must be a text"
                 })
             }
@@ -54,7 +54,7 @@ const employeeRoutes: FastifyPluginAsync = async (fastify) => {
             return {
                 message: `Employee '${request.body.name}' successfully added`,
                 employee: {
-                    id: stmt.lastInsertRowid,
+                    id: Number(stmt.lastInsertRowid),
                     name: request.body.name
                 }
             }
@@ -72,7 +72,7 @@ const employeeRoutes: FastifyPluginAsync = async (fastify) => {
             db.prepare("UPDATE employees SET name = ? WHERE id = ?").run(request.body.name, request.params.id)
             return {
                 employee: { 
-                    id: request.params.id, 
+                    id: Number(request.params.id), 
                     name: request.body.name 
                 },
                 message: `Employee ID : ${request.params.id} successfully updated`
